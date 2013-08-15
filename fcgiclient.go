@@ -86,22 +86,25 @@ type record struct {
 	buf [maxWrite + maxPad]byte
 }
 
-func (rec *record) read(r io.Reader) (err error) {
+func (rec *record) read(r io.Reader) (buf []byte, err error) {
 	if err = binary.Read(r, binary.BigEndian, &rec.h); err != nil {
-		return err
+		return
 	}
 	if rec.h.Version != 1 {
-		return errors.New("fcgi: invalid header version")
+    err = errors.New("fcgi: invalid header version")
+		return
 	}
-	n := int(rec.h.ContentLength) + int(rec.h.PaddingLength)
-	if _, err = io.ReadFull(r, rec.buf[:n]); err != nil {
-		return err
+  if rec.h.Type == FCGI_END_REQUEST {
+    err = io.EOF
+    return
+  }
+  n := int(rec.h.ContentLength) + int(rec.h.PaddingLength)
+	if n, err = io.ReadFull(r, rec.buf[:n]); err != nil {
+		return
 	}
-	return nil
-}
+  buf = rec.buf[:int(rec.h.ContentLength)]
 
-func (r *record) content() []byte {
-	return r.buf[:r.h.ContentLength]
+	return 
 }
 
 type FCGIClient struct {
@@ -123,7 +126,7 @@ func New(h string, args ...interface{}) (fcgi *FCGIClient, err error) {
 		addr := h + ":" + strconv.FormatInt(int64(args[0].(int)), 10)
 		conn, err = net.Dial("tcp", addr)
 	case string:
-		addr := h + ":" + args[0].(string)
+		addr := args[0].(string)
 		conn, err = net.Dial("unix", addr)
 	default:
 		err = errors.New("fcgi: we only accept int (port) or string (socket) params.")
@@ -288,14 +291,14 @@ func (this *FCGIClient) Request(env map[string]string, reqStr string) (ret []byt
 		}
 	}
 
-
 	rec := &record{}
-	err = rec.read(this.rwc)
-	if err != nil {
-		return
-	}
-
-	ret = rec.content()
+	for {
+    buf, err := rec.read(this.rwc)
+  	if err != nil {
+  		break
+  	}
+    ret = append(ret, buf...)
+  }
 
 	return
 }
