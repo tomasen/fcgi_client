@@ -270,7 +270,8 @@ func (w *streamWriter) Close() error {
 	// send empty record to close the stream
 	return w.c.writeRecord(w.recType, w.reqId, nil)
 }
-
+// reqStr will send to fcgi server's STDIN
+// not all (eg. php) fcgi server support read STDIN in cgi mode
 func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, reqStr string) (ret []byte, err error) {
 
 	var reqId uint16 = 1
