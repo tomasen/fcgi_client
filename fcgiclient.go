@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"strconv"
   "strings"
   "net/http"
 )
@@ -118,27 +117,24 @@ type FCGIClient struct {
 	keepAlive bool
 }
 
-func New(h string, args ...interface{}) (fcgi *FCGIClient, err error) {
+func New(t string, a string) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
-	if len(args) != 1 {
-		err = errors.New("fcgi: not enough params")
-		return
-	}
-	switch args[0].(type) {
-	case int:
-		addr := h + ":" + strconv.FormatInt(int64(args[0].(int)), 10)
-		conn, err = net.Dial("tcp", addr)
-	case string:
-		addr := args[0].(string)
-		conn, err = net.Dial("unix", addr)
-	default:
-		err = errors.New("fcgi: we only accept int (port) or string (socket) params.")
-	}
+
+	conn, err = net.Dial(t, a)
+  if err != nil {
+    return
+  }
+
 	fcgi = &FCGIClient{
 		rwc:       conn,
 		keepAlive: false,
 	}
+  
 	return
+}
+
+func (this *FCGIClient) Close() {
+  this.rwc.Close()
 }
 
 func (this *FCGIClient) writeRecord(recType uint8, reqId uint16, content []byte) ( err error) {
@@ -287,11 +283,9 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
 	if err != nil {
 		return
 	}
-	if len(reqStr) > 0 {
-		err = this.writeRecord(FCGI_STDIN, reqId, []byte(reqStr))
-		if err != nil {
-			return
-		}
+	err = this.writeRecord(FCGI_STDIN, reqId, []byte(reqStr))
+	if err != nil {
+		return
 	}
 
   afterheader := false
@@ -301,7 +295,6 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
   	if err != nil {
   		break
   	}
-    
     
     if afterheader {
       if resp != nil {
@@ -332,7 +325,6 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
       
       afterheader = true
     }
-     
   }
   
 	return
