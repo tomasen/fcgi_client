@@ -13,6 +13,8 @@ import (
 	"io"
 	"net"
 	"strconv"
+  "strings"
+  "net/http"
 )
 
 const FCGI_LISTENSOCK_FILENO uint8 = 0
@@ -20,6 +22,7 @@ const FCGI_HEADER_LEN uint8 = 8
 const VERSION_1 uint8 = 1
 const FCGI_NULL_REQUEST_ID uint8 = 0
 const FCGI_KEEP_CONN uint8 = 1
+const doubleCRLF = "\r\n\r\n"
 
 const (
 	FCGI_BEGIN_REQUEST uint8 = iota + 1
@@ -272,7 +275,7 @@ func (w *streamWriter) Close() error {
 	return w.c.writeRecord(w.recType, w.reqId, nil)
 }
 
-func (this *FCGIClient) Request(env map[string]string, reqStr string) (ret []byte, err error) {
+func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, reqStr string) (ret []byte, err error) {
 
 	var reqId uint16 = 1
 
@@ -291,14 +294,46 @@ func (this *FCGIClient) Request(env map[string]string, reqStr string) (ret []byt
 		}
 	}
 
+  afterheader := false
 	rec := &record{}
 	for {
     buf, err := rec.read(this.rwc)
   	if err != nil {
   		break
   	}
-    ret = append(ret, buf...)
+    
+    
+    if afterheader {
+      if resp != nil {
+        resp.Write(buf)
+      }
+      ret = append(ret, buf...)
+    } else {
+      z := strings.SplitN(string(buf), doubleCRLF, 2)
+      switch (len(z)) {
+        case 2:
+          if resp != nil {
+            lines := strings.Split(z[0], "\n")
+            for line := range lines  {
+              v := strings.SplitN(lines[line], ":",2)
+              if len(v) == 2 {
+                resp.Header().Set(strings.TrimSpace(v[0]), strings.TrimSpace(v[1]))
+              }
+            }
+            resp.Write([]byte(z[1]))
+          }
+          ret = append(ret, []byte(z[1])...)
+        default:
+          if resp != nil {
+            resp.Write(buf)
+          }
+          ret = append(ret, buf...)
+      }
+      
+      afterheader = true
+    }
+     
   }
-
+  
 	return
 }
