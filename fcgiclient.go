@@ -284,6 +284,10 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
 	if err != nil {
 		return
 	}
+	err = this.writeRecord(FCGI_PARAMS, reqId, nil)
+	if err != nil {
+		return
+	}
 	err = this.writeRecord(FCGI_STDIN, reqId, []byte(reqStr))
 	if err != nil {
 		return
