@@ -288,13 +288,17 @@ func (w *streamWriter) Close() error {
 	return w.c.writeRecord(w.recType, w.reqId, nil)
 }
 
-// post data example: "key1=val1&key2=val2"
-func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, post []byte) (ret []byte, err error) {
+// data(post) example: "key1=val1&key2=val2"
+// do not return content when pasv is ture, only pass it to writer
+func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, data []byte, pasv bool) (ret []byte, err error) {
 
 	var reqId uint16 = 1
 
-  // set correct stdin length (required for php)
-  env["CONTENT_LENGTH"] = strconv.Itoa(len(post))
+	// set correct stdin length (required for php)
+	env["CONTENT_LENGTH"] = strconv.Itoa(len(data))
+	if len(data) > 0 {
+	  env["REQUEST_METHOD"] = "POST"
+	}
 
 	err = this.writeBeginRequest(reqId, uint16(FCGI_RESPONDER), 0)	
 	if err != nil {
@@ -306,7 +310,7 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
 		return
 	}
   
-	err = this.writeRecord(FCGI_STDIN, reqId, post)
+	err = this.writeRecord(FCGI_STDIN, reqId, data)
 	if err != nil {
 		return
 	}
@@ -323,9 +327,12 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
       if resp != nil {
         resp.Write(buf)
       }
-      ret = append(ret, buf...)
+      if !pasv {
+        ret = append(ret, buf...)
+      }
     } else {
-      z := strings.SplitN(string(buf), doubleCRLF, 2)
+      ret = append(ret, buf...)
+      z := strings.SplitN(string(ret), doubleCRLF, 2)
       switch (len(z)) {
         case 2:
           if resp != nil {
@@ -338,12 +345,12 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
             }
             resp.Write([]byte(z[1]))
           }
-          ret = append(ret, []byte(z[1])...)
-        default:
-          if resp != nil {
-            resp.Write(buf)
+          if pasv {
+            ret = ret[:0]
           }
-          ret = append(ret, buf...)
+        default:
+          // wait until doubleCRLF          
+          continue
       }
       
       afterheader = true
