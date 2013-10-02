@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
   "strings"
+  "strconv"
   "net/http"
 )
 
@@ -270,25 +271,26 @@ func (w *streamWriter) Close() error {
 	// send empty record to close the stream
 	return w.c.writeRecord(w.recType, w.reqId, nil)
 }
-// reqStr will send to fcgi server's STDIN
-// not all (eg. php) fcgi server support read STDIN in cgi mode
-func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, reqStr string) (ret []byte, err error) {
+
+// post data example: "key1=val1&key2=val2"
+func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, post []byte) (ret []byte, err error) {
 
 	var reqId uint16 = 1
+
+  // set correct stdin length (required for php)
+  env["CONTENT_LENGTH"] = strconv.Itoa(len(post))
 
 	err = this.writeBeginRequest(reqId, uint16(FCGI_RESPONDER), 0)	
 	if err != nil {
 		return
 	}
+    
 	err = this.writePairs(FCGI_PARAMS, reqId, env)
 	if err != nil {
 		return
 	}
-	err = this.writeRecord(FCGI_PARAMS, reqId, nil)
-	if err != nil {
-		return
-	}
-	err = this.writeRecord(FCGI_STDIN, reqId, []byte(reqStr))
+  
+	err = this.writeRecord(FCGI_STDIN, reqId, post)
 	if err != nil {
 		return
 	}
