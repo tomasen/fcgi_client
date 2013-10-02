@@ -59,7 +59,7 @@ const (
 )
 
 const (
-	maxWrite = 65535 // TODO: correct limit maximum record body
+	maxWrite = 65500 // 65530 may work, but for compatibility
 	maxPad   = 255
 )
 
@@ -86,7 +86,7 @@ func (h *header) init(recType uint8, reqId uint16, contentLength int) {
 
 type record struct {
 	h   header
-	buf [maxWrite + maxPad]byte
+	rbuf []byte
 }
 
 func (rec *record) read(r io.Reader) (buf []byte, err error) {
@@ -101,11 +101,14 @@ func (rec *record) read(r io.Reader) (buf []byte, err error) {
     err = io.EOF
     return
   }
-  n := int(rec.h.ContentLength) + int(rec.h.PaddingLength)
-	if n, err = io.ReadFull(r, rec.buf[:n]); err != nil {
+	n := int(rec.h.ContentLength) + int(rec.h.PaddingLength)
+	if len(rec.rbuf) < n {
+	  rec.rbuf = make([]byte, n)
+	}
+	if n, err = io.ReadFull(r, rec.rbuf[:n]); err != nil {
 		return
 	}
-  buf = rec.buf[:int(rec.h.ContentLength)]
+	buf = rec.rbuf[:int(rec.h.ContentLength)]
 
 	return 
 }
@@ -173,9 +176,15 @@ func (this *FCGIClient) writePairs(recType uint8, reqId uint16, pairs map[string
 	b  := make([]byte, 8)
 	nn := 0
 	for k, v := range pairs {
+    m := 8 + len(k) + len(v)
+    if m > maxWrite {
+      // param data size exceed 65535 bytes"
+      vl := maxWrite - 8 - len(k)
+      v = v[:vl]      
+    }
     n := encodeSize(b, uint32(len(k)))
     n += encodeSize(b[n:], uint32(len(v)))
-    m := 8 + len(k) + len(v)
+    m = n + len(k) + len(v)
     if (nn + m) > maxWrite {
       w.Flush()
       nn = 0
