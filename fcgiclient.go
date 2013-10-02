@@ -59,7 +59,7 @@ const (
 )
 
 const (
-	maxWrite = 6553500 // maximum record body
+	maxWrite = 65535 // TODO: correct limit maximum record body
 	maxPad   = 255
 )
 
@@ -169,21 +169,28 @@ func (this *FCGIClient) writeEndRequest(reqId uint16, appStatus int, protocolSta
 }
 
 func (this *FCGIClient) writePairs(recType uint8, reqId uint16, pairs map[string]string) error {
-	w := newWriter(this, recType, reqId)
-	b := make([]byte, 8)
+	w  := newWriter(this, recType, reqId)
+	b  := make([]byte, 8)
+	nn := 0
 	for k, v := range pairs {
-		n := encodeSize(b, uint32(len(k)))
-		n += encodeSize(b[n:], uint32(len(v)))
-		if _, err := w.Write(b[:n]); err != nil {
-			return err
-		}
-		if _, err := w.WriteString(k); err != nil {
-			return err
-		}
-		if _, err := w.WriteString(v); err != nil {
-			return err
-		}
-	}
+    n := encodeSize(b, uint32(len(k)))
+    n += encodeSize(b[n:], uint32(len(v)))
+    m := 8 + len(k) + len(v)
+    if (nn + m) > maxWrite {
+      w.Flush()
+      nn = 0
+    }
+    nn += m
+    if _, err := w.Write(b[:n]); err != nil {
+      return err
+    }
+    if _, err := w.WriteString(k); err != nil {
+      return err
+    }
+    if _, err := w.WriteString(v); err != nil {
+      return err
+    }
+  }
 	w.Close()
 	return nil
 }
