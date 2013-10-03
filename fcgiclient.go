@@ -310,9 +310,20 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
 		return
 	}
   
-	err = this.writeRecord(FCGI_STDIN, reqId, data)
-	if err != nil {
-		return
+	for {
+	  n := len(data)
+	  if n > maxWrite {
+	    n = maxWrite
+	  }
+
+	  err = this.writeRecord(FCGI_STDIN, reqId, data[:n])
+	  if err != nil {
+	  	return
+	  }
+	  if n <= 0 {
+	    break
+	  }
+	  data = data[n:]
 	}
   
   afterheader := false
