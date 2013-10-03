@@ -314,7 +314,7 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
 	if err != nil {
 		return
 	}
-
+  
   afterheader := false
 	rec := &record{}
 	for {
@@ -332,6 +332,7 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
       }
     } else {
       ret = append(ret, buf...)
+      // TODO: ensure binary-safed SplitN
       z := strings.SplitN(string(ret), doubleCRLF, 2)
       switch (len(z)) {
         case 2:
@@ -347,13 +348,14 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
           }
           if pasv {
             ret = ret[:0]
+          }else{
+            ret = []byte(z[1])
           }
+          afterheader = true
         default:
           // wait until doubleCRLF          
           continue
       }
-      
-      afterheader = true
     }
   }
   
