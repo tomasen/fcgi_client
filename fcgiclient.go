@@ -297,7 +297,7 @@ func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string,
 	// set correct stdin length (required for php)
 	env["CONTENT_LENGTH"] = strconv.Itoa(len(data))
 	if len(data) > 0 {
-    // TODO: organize post data automaticly 
+    // TODO: organize post data automaticly , support mime/multipart
 	  env["REQUEST_METHOD"] = "POST"
     env["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
 	}

@@ -1,5 +1,7 @@
 Go fastcgi client with fcgi params support.
 
+####Status: In Development (future versions may change API)
+
 Based on https://code.google.com/p/go-fastcgi-client/
 
 
