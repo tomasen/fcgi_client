@@ -11,10 +11,16 @@ import (
 	"sync"
 	"errors"
 	"io"
+	"io/ioutil"
 	"net"
-  "strings"
-  "strconv"
-  "net/http"
+	"net/url"
+	"net/http/httputil"
+	"net/textproto"
+	"strconv"
+	"os"
+	"net/http"
+	"mime/multipart"
+	"path/filepath"
 )
 
 const FCGI_LISTENSOCK_FILENO uint8 = 0
@@ -94,16 +100,16 @@ func (rec *record) read(r io.Reader) (buf []byte, err error) {
 		return
 	}
 	if rec.h.Version != 1 {
-    err = errors.New("fcgi: invalid header version")
+		err = errors.New("fcgi: invalid header version")
 		return
 	}
-  if rec.h.Type == FCGI_END_REQUEST {
-    err = io.EOF
-    return
-  }
+	if rec.h.Type == FCGI_END_REQUEST {
+		err = io.EOF
+		return
+	}
 	n := int(rec.h.ContentLength) + int(rec.h.PaddingLength)
 	if len(rec.rbuf) < n {
-	  rec.rbuf = make([]byte, n)
+		rec.rbuf = make([]byte, n)
 	}
 	if n, err = io.ReadFull(r, rec.rbuf[:n]); err != nil {
 		return
@@ -117,35 +123,37 @@ type FCGIClient struct {
 	mutex     sync.Mutex
 	rwc       io.ReadWriteCloser
 	h         header
-	buf 	  bytes.Buffer
+	buf 	    bytes.Buffer
 	keepAlive bool
+	reqId     uint16
 }
 
 func New(t string, a string) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
 
 	conn, err = net.Dial(t, a)
-  if err != nil {
-    return
-  }
+	if err != nil {
+		return
+	}
 
 	fcgi = &FCGIClient{
 		rwc:       conn,
 		keepAlive: false,
+		reqId:     1,
 	}
   
 	return
 }
 
 func (this *FCGIClient) Close() {
-  this.rwc.Close()
+	this.rwc.Close()
 }
 
-func (this *FCGIClient) writeRecord(recType uint8, reqId uint16, content []byte) ( err error) {
+func (this *FCGIClient) writeRecord(recType uint8, content []byte) ( err error) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
 	this.buf.Reset()
-	this.h.init(recType, reqId, len(content))
+	this.h.init(recType, this.reqId, len(content))
 	if err := binary.Write(&this.buf, binary.BigEndian, this.h); err != nil {
 		return err
 	}
@@ -159,47 +167,47 @@ func (this *FCGIClient) writeRecord(recType uint8, reqId uint16, content []byte)
 	return err
 }
 
-func (this *FCGIClient) writeBeginRequest(reqId uint16, role uint16, flags uint8) error {
+func (this *FCGIClient) writeBeginRequest(role uint16, flags uint8) error {
 	b := [8]byte{byte(role >> 8), byte(role), flags}
-	return this.writeRecord(FCGI_BEGIN_REQUEST, reqId, b[:])
+	return this.writeRecord(FCGI_BEGIN_REQUEST, b[:])
 }
 
-func (this *FCGIClient) writeEndRequest(reqId uint16, appStatus int, protocolStatus uint8) error {
+func (this *FCGIClient) writeEndRequest(appStatus int, protocolStatus uint8) error {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint32(b, uint32(appStatus))
 	b[4] = protocolStatus
-	return this.writeRecord(FCGI_END_REQUEST, reqId, b)
+	return this.writeRecord(FCGI_END_REQUEST, b)
 }
 
-func (this *FCGIClient) writePairs(recType uint8, reqId uint16, pairs map[string]string) error {
-	w  := newWriter(this, recType, reqId)
+func (this *FCGIClient) writePairs(recType uint8, pairs map[string]string) error {
+	w  := newWriter(this, recType)
 	b  := make([]byte, 8)
 	nn := 0
 	for k, v := range pairs {
-    m := 8 + len(k) + len(v)
-    if m > maxWrite {
-      // param data size exceed 65535 bytes"
-      vl := maxWrite - 8 - len(k)
-      v = v[:vl]      
-    }
-    n := encodeSize(b, uint32(len(k)))
-    n += encodeSize(b[n:], uint32(len(v)))
-    m = n + len(k) + len(v)
-    if (nn + m) > maxWrite {
-      w.Flush()
-      nn = 0
-    }
-    nn += m
-    if _, err := w.Write(b[:n]); err != nil {
-      return err
-    }
-    if _, err := w.WriteString(k); err != nil {
-      return err
-    }
-    if _, err := w.WriteString(v); err != nil {
-      return err
-    }
-  }
+		m := 8 + len(k) + len(v)
+		if m > maxWrite {
+			// param data size exceed 65535 bytes"
+			vl := maxWrite - 8 - len(k)
+			v = v[:vl]      
+		}
+		n := encodeSize(b, uint32(len(k)))
+		n += encodeSize(b[n:], uint32(len(v)))
+		m = n + len(k) + len(v)
+		if (nn + m) > maxWrite {
+			w.Flush()
+			nn = 0
+		}
+		nn += m
+		if _, err := w.Write(b[:n]); err != nil {
+			return err
+		}
+		if _, err := w.WriteString(k); err != nil {
+			return err
+		}
+		if _, err := w.WriteString(v); err != nil {
+			return err
+		}
+	}
 	w.Close()
 	return nil
 }
@@ -253,8 +261,8 @@ func (w *bufWriter) Close() error {
 	return w.closer.Close()
 }
 
-func newWriter(c *FCGIClient, recType uint8, reqId uint16) *bufWriter {
-	s := &streamWriter{c: c, recType: recType, reqId: reqId}
+func newWriter(c *FCGIClient, recType uint8) *bufWriter {
+	s := &streamWriter{c: c, recType: recType}
 	w := bufio.NewWriterSize(s, maxWrite)
 	return &bufWriter{s, w}
 }
@@ -264,7 +272,6 @@ func newWriter(c *FCGIClient, recType uint8, reqId uint16) *bufWriter {
 type streamWriter struct {
 	c       *FCGIClient
 	recType uint8
-	reqId   uint16
 }
 
 func (w *streamWriter) Write(p []byte) (int, error) {
@@ -274,7 +281,7 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 		if n > maxWrite {
 			n = maxWrite
 		}
-		if err := w.c.writeRecord(w.recType, w.reqId, p[:n]); err != nil {
+		if err := w.c.writeRecord(w.recType, p[:n]); err != nil {
 			return nn, err
 		}
 		nn += n
@@ -285,92 +292,151 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 
 func (w *streamWriter) Close() error {
 	// send empty record to close the stream
-	return w.c.writeRecord(w.recType, w.reqId, nil)
+	return w.c.writeRecord(w.recType, nil)
 }
 
-// data(post) example: "key1=val1&key2=val2"
-// do not return content when pasv is ture, only pass it to writer
-func (this *FCGIClient) Request(resp http.ResponseWriter, env map[string]string, data []byte, pasv bool) (ret []byte, err error) {
+type streamReader struct {
+	c       *FCGIClient
+	buf     []byte
+}
 
-	var reqId uint16 = 1
-
-	// set correct stdin length (required for php)
-	env["CONTENT_LENGTH"] = strconv.Itoa(len(data))
-	if len(data) > 0 {
-    // TODO: organize post data automaticly , support mime/multipart
-	  env["REQUEST_METHOD"] = "POST"
-    env["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
-	}
-
-	err = this.writeBeginRequest(reqId, uint16(FCGI_RESPONDER), 0)	
-	if err != nil {
-		return
-	}
-    
-	err = this.writePairs(FCGI_PARAMS, reqId, env)
-	if err != nil {
-		return
-	}
+func (w *streamReader) Read(p []byte) (n int, err error) {
   
-	for {
-	  n := len(data)
-	  if n > maxWrite {
-	    n = maxWrite
-	  }
-
-	  err = this.writeRecord(FCGI_STDIN, reqId, data[:n])
-	  if err != nil {
-	  	return
-	  }
-	  if n <= 0 {
-	    break
-	  }
-	  data = data[n:]
-	}
+	if len(p) > 0 { 
+		if len(w.buf) == 0 {
+			rec := &record{}
+			w.buf, err = rec.read(w.c.rwc)
+			if err != nil {
+				return
+			}
+		}
   
-  afterheader := false
-	rec := &record{}
-	for {
-    buf, err := rec.read(this.rwc)
-  	if err != nil {
-  		break
-  	}
-    
-    if afterheader {
-      if resp != nil {
-        resp.Write(buf)
-      }
-      if !pasv {
-        ret = append(ret, buf...)
-      }
-    } else {
-      ret = append(ret, buf...)
-      // TODO: ensure binary-safed SplitN
-      z := strings.SplitN(string(ret), doubleCRLF, 2)
-      switch (len(z)) {
-        case 2:
-          if resp != nil {
-            lines := strings.Split(z[0], "\n")
-            for line := range lines  {
-              v := strings.SplitN(lines[line], ":",2)
-              if len(v) == 2 {
-                resp.Header().Set(strings.TrimSpace(v[0]), strings.TrimSpace(v[1]))
-              }
-            }
-            resp.Write([]byte(z[1]))
-          }
-          if pasv {
-            ret = ret[:0]
-          }else{
-            ret = []byte(z[1])
-          }
-          afterheader = true
-        default:
-          // wait until doubleCRLF          
-          continue
-      }
-    }
-  }
+		n = len(p)
+		if n > len(w.buf) {
+			n = len(w.buf)
+		}
+		copy(p, w.buf[:n])
+		w.buf = w.buf[n:]
+	}
   
 	return
+}
+
+func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Reader, err error) {
+	err = this.writeBeginRequest(uint16(FCGI_RESPONDER), 0)	
+	if err != nil {
+		return
+	}
+  
+	err = this.writePairs(FCGI_PARAMS, p)
+	if err != nil {
+		return
+	}
+
+	body := newWriter(this, FCGI_STDIN)  
+	if rd != nil {
+		io.Copy(body, rd)
+	}
+	body.Close()
+  
+	r = &streamReader{c:this}
+	return 
+}
+
+// Checks whether chunked is part of the encodings stack
+func chunked(te []string) bool { return len(te) > 0 && te[0] == "chunked" }
+
+func (this *FCGIClient) Request(p map[string]string, rd io.Reader) (resp *http.Response, err error) {
+
+	r, err := this.RawRequest(p, rd)
+	if err != nil {
+		return
+	}
+	rb := bufio.NewReader(r)
+
+	tp := textproto.NewReader(rb)
+	resp = new(http.Response)
+     
+	// Parse the response headers.
+	mimeHeader, err := tp.ReadMIMEHeader()
+	if err != nil {
+		return
+	}
+	resp.Header = http.Header(mimeHeader)
+
+	// TODO: fixTransferEncoding ?
+	resp.TransferEncoding = resp.Header["Transfer-Encoding"]
+	resp.ContentLength,_ = strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+  
+	if chunked(resp.TransferEncoding) {
+		resp.Body = ioutil.NopCloser(httputil.NewChunkedReader(rb))
+	} else {
+		resp.Body = ioutil.NopCloser(rb)
+	}
+
+	return
+}
+
+func (this *FCGIClient) Get(p map[string]string) (resp *http.Response, err error) {
+	p["REQUEST_METHOD"] = "GET"
+	p["CONTENT_LENGTH"] = "0"
+  
+	return this.Request(p, nil)
+}
+
+func (this *FCGIClient) Post(p map[string]string, rd io.Reader, l int) (resp *http.Response, err error) {
+  
+	if len(p["REQUEST_METHOD"]) == 0 || p["REQUEST_METHOD"] == "GET" { 
+		p["REQUEST_METHOD"] = "POST"
+	}
+	p["CONTENT_LENGTH"] = strconv.Itoa(l)
+  
+	if len(p["CONTENT_TYPE"]) == 0 {
+		p["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
+	}
+
+	return this.Request(p, rd)
+}
+
+func (this *FCGIClient) PostForm(p map[string]string, data url.Values) (resp *http.Response, err error) {
+	p["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
+
+	rd := bytes.NewReader([]byte(data.Encode()))
+	return this.Post(p, rd, rd.Len())
+}
+
+func (this *FCGIClient) PostFile(p map[string]string, data url.Values, file map[string]string) (resp *http.Response, err error) {
+	buf := &bytes.Buffer{}
+	writer := multipart.NewWriter(buf)
+	p["CONTENT_TYPE"]   = writer.FormDataContentType()
+
+	for key, val := range data {
+		for _, v0 := range val {
+			err = writer.WriteField(key, v0)
+			if err != nil {
+				return
+			}
+		}
+	}
+  
+	for key, val := range file {
+		fd, e := os.Open(val)
+		if e != nil {
+			return nil, e
+		}
+		defer fd.Close()
+      
+		part, e := writer.CreateFormFile(key, filepath.Base(val))
+		if e != nil {
+			return nil, e
+		}
+		_, err = io.Copy(part, fd)
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return
+	}
+  
+	return this.Post(p, buf, buf.Len())
 }
