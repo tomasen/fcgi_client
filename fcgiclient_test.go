@@ -21,9 +21,14 @@ import (
   "encoding/binary"
 )
 
-
+// test fcgi protocol includes:
+// Get, Post, Post in multipart/form-data, and Post with files
+// each key should be the md5 of the value or the file uploaded
+// sepicify remote fcgi responer ip:port to test with php
+// test failed if the remote fcgi(script) failed md5 verification 
+// and output "FAILED" in response
 const (
-  script_file = "/tank/www/fcgi_test.php"
+  script_file = "/tank/www/fcgic_test.php"
   //ip_port = "remote-php-serv:59000"
   ip_port = "127.0.0.1:59000"
 )
@@ -31,8 +36,6 @@ const (
 var (
   t_ *testing.T = nil
 )
-
-//TODO: test chunked reader
 
 type FastCGIServer struct{}
 
@@ -107,7 +110,7 @@ func sendFcgi(reqType int, fcgi_params map[string]string, data []byte, posts map
     if len(data) > 0 {
       length = len(data)
       rd := bytes.NewReader(data)
-      resp, err = fcgi.Post(fcgi_params, rd, rd.Len())
+      resp, err = fcgi.Post(fcgi_params, "", rd, rd.Len())
     } else if len(posts) > 0 {
       values := url.Values{}
       for k,v := range posts {
@@ -180,6 +183,7 @@ func generateRandFile(size int) (p string, m string) {
 }
 
 func Test(t *testing.T) {
+  // TODO: test chunked reader
 	
   t_ = t
   rand.Seed( time.Now().UTC().UnixNano())

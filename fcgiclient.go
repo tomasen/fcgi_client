@@ -322,6 +322,8 @@ func (w *streamReader) Read(p []byte) (n int, err error) {
 	return
 }
 
+// RawRequest made the request and returns a io.Reader that translates the data read 
+// from fcgi responder out of fcgi packet before returning it.
 func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Reader, err error) {
 	err = this.writeBeginRequest(uint16(FCGI_RESPONDER), 0)	
 	if err != nil {
@@ -343,17 +345,16 @@ func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Read
 	return 
 }
 
-// Checks whether chunked is part of the encodings stack
-func chunked(te []string) bool { return len(te) > 0 && te[0] == "chunked" }
-
+// Request returns a HTTP Response with Header and Body 
+// from fcgi responder
 func (this *FCGIClient) Request(p map[string]string, rd io.Reader) (resp *http.Response, err error) {
 
 	r, err := this.RawRequest(p, rd)
 	if err != nil {
 		return
 	}
+  
 	rb := bufio.NewReader(r)
-
 	tp := textproto.NewReader(rb)
 	resp = new(http.Response)
      
@@ -377,38 +378,47 @@ func (this *FCGIClient) Request(p map[string]string, rd io.Reader) (resp *http.R
 	return
 }
 
+// Get issues a GET request to the fcgi responder.
 func (this *FCGIClient) Get(p map[string]string) (resp *http.Response, err error) {
-	p["REQUEST_METHOD"] = "GET"
+	
+  p["REQUEST_METHOD"] = "GET"
 	p["CONTENT_LENGTH"] = "0"
   
 	return this.Request(p, nil)
 }
 
-func (this *FCGIClient) Post(p map[string]string, rd io.Reader, l int) (resp *http.Response, err error) {
+// Get issues a Post request to the fcgi responder. with request body  
+// in the format that bodyType specified
+func (this *FCGIClient) Post(p map[string]string, bodyType string, body io.Reader, l int) (resp *http.Response, err error) {
   
 	if len(p["REQUEST_METHOD"]) == 0 || p["REQUEST_METHOD"] == "GET" { 
 		p["REQUEST_METHOD"] = "POST"
 	}
 	p["CONTENT_LENGTH"] = strconv.Itoa(l)
+  if len(bodyType) > 0 {
+    p["CONTENT_TYPE"]   = bodyType
+  } else {
+    p["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
+  }
   
-	if len(p["CONTENT_TYPE"]) == 0 {
-		p["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
-	}
-
-	return this.Request(p, rd)
+	
+	return this.Request(p, body)
 }
 
+// PostForm issues a POST to the fcgi responder, with form
+// as a string key to a list values (url.Values)
 func (this *FCGIClient) PostForm(p map[string]string, data url.Values) (resp *http.Response, err error) {
-	p["CONTENT_TYPE"]   = "application/x-www-form-urlencoded"
-
-	rd := bytes.NewReader([]byte(data.Encode()))
-	return this.Post(p, rd, rd.Len())
+	body := bytes.NewReader([]byte(data.Encode()))
+	return this.Post(p, "application/x-www-form-urlencoded", body, body.Len())
 }
 
+// PostFile issues a POST to the fcgi responder in multipart(RFC 2046) standard,
+// with form as a string key to a list values (url.Values), 
+// and/or with file as a string key to a list file path.
 func (this *FCGIClient) PostFile(p map[string]string, data url.Values, file map[string]string) (resp *http.Response, err error) {
 	buf := &bytes.Buffer{}
 	writer := multipart.NewWriter(buf)
-	p["CONTENT_TYPE"]   = writer.FormDataContentType()
+	bodyType  := writer.FormDataContentType()
 
 	for key, val := range data {
 		for _, v0 := range val {
@@ -438,5 +448,8 @@ func (this *FCGIClient) PostFile(p map[string]string, data url.Values, file map[
 		return
 	}
   
-	return this.Post(p, buf, buf.Len())
+	return this.Post(p, bodyType, buf, buf.Len())
 }
+
+// Checks whether chunked is part of the encodings stack
+func chunked(te []string) bool { return len(te) > 0 && te[0] == "chunked" }
