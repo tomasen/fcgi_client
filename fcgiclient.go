@@ -130,7 +130,7 @@ type FCGIClient struct {
 
 // Connects to the fcgi responder at the specified network address. 
 // See func net.Dial for a description of the network and address parameters.
-func New(network, address string) (fcgi *FCGIClient, err error) {
+func Dial(network, address string) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
 
 	conn, err = net.Dial(network, address)
@@ -325,9 +325,9 @@ func (w *streamReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// RawRequest made the request and returns a io.Reader that translates the data read 
+// writeRequest made the request and returns a io.Reader that translates the data read 
 // from fcgi responder out of fcgi packet before returning it.
-func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Reader, err error) {
+func (this *FCGIClient) writeRequest(p map[string]string, req io.Reader) (r io.Reader, err error) {
 	err = this.writeBeginRequest(uint16(FCGI_RESPONDER), 0)	
 	if err != nil {
 		return
@@ -339,8 +339,8 @@ func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Read
 	}
 
 	body := newWriter(this, FCGI_STDIN)  
-	if rd != nil {
-		io.Copy(body, rd)
+	if req != nil {
+		io.Copy(body, req)
 	}
 	body.Close()
   
@@ -350,9 +350,9 @@ func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Read
 
 // Request returns a HTTP Response with Header and Body 
 // from fcgi responder
-func (this *FCGIClient) Request(p map[string]string, rd io.Reader) (resp *http.Response, err error) {
+func (this *FCGIClient) Request(p map[string]string, req io.Reader) (resp *http.Response, err error) {
 
-	r, err := this.RawRequest(p, rd)
+	r, err := this.writeRequest(p, req)
 	if err != nil {
 		return
 	}

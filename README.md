@@ -85,8 +85,8 @@ More example can be found in [fcgiclient_test.go](./src/fcgiclient_test.go)
 
 # Functions
 
-###func New         
-    func New(network, address string) (fcgi *FCGIClient, err error)
+###func Dial         
+    func Dial(network, address string) (fcgi *FCGIClient, err error)
 Connects to the fcgi responder at the specified network address. See func [net.Dial](http://golang.org/pkg/net/#Dial) for a description of the network and address parameters.
 
 ###func (*FCGIClient) Get         
@@ -108,14 +108,9 @@ PostFile issues a POST to the fcgi responder in multipart(RFC 2046) standard, wi
                                      data url.Values) (resp *http.Response, err error)
 PostForm issues a POST to the fcgi responder, with form as a string key to a list values (url.Values)
 
-###func (*FCGIClient) RawRequest         
-    func (this *FCGIClient) RawRequest(p map[string]string,      
-                                       rd io.Reader) (r io.Reader, err error)
-RawRequest made the request and returns a io.Reader that translates the data read from fcgi responder out of fcgi packet before returning it.
-
 ###func (*FCGIClient) Request         
     func (this *FCGIClient) Request(p map[string]string, 
-                                    rd io.Reader) (resp *http.Response, err error)
+                                         req io.Reader) (resp *http.Response, err error)
 Request returns a HTTP Response with Header and Body from fcgi responder
 
 ###func (*FCGIClient) Close         
