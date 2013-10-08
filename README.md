@@ -1,8 +1,10 @@
 #Go fastcgi client with fcgi params support.
 
-####Status: In Development (future versions may change API)
+####Status: In Development
 
 Forked from https://code.google.com/p/go-fastcgi-client/
+
+# Examples
 
 simple get request
 
@@ -80,7 +82,7 @@ or send file
         log.Println("content:", string(content))
     }
 
-More example can be found in [fcgiclient_test.go](./src/fcgiclient_test.go)
+More examples can be found in [fcgiclient_test.go](https://bitbucket.org/PinIdea/fcgi_client/src/tip/fcgiclient_test.go)
 
 
 # Functions
