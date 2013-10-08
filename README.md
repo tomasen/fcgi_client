@@ -33,3 +33,38 @@ Forked from https://code.google.com/p/go-fastcgi-client/
 
 
 More example can be found in [fcgiclient_test.go](./src/fcgiclient_test.go)
+
+
+## Functions
+
+###func New         
+    func New(network, address string) (fcgi *FCGIClient, err error)
+Connects to the fcgi responder at the specified network address. See func [net.Dial](http://golang.org/pkg/net/#Dial) for a description of the network and address parameters.
+
+###func (*FCGIClient) Close         
+    func (this *FCGIClient) Close()
+Close fcgi connnection
+
+###func (*FCGIClient) Get         
+    func (this *FCGIClient) Get(p map[string]string) (resp *http.Response, err error)
+Get issues a GET request to the fcgi responder.
+
+###func (*FCGIClient) Post         
+    func (this *FCGIClient) Post(p map[string]string, bodyType string, body io.Reader, l int) (resp *http.Response, err error)
+Get issues a Post request to the fcgi responder. with request body in the format that bodyType specified
+
+###func (*FCGIClient) PostFile         
+    func (this *FCGIClient) PostFile(p map[string]string, data url.Values, file map[string]string) (resp *http.Response, err error)
+PostFile issues a POST to the fcgi responder in multipart(RFC 2046) standard, with form as a string key to a list values (url.Values), and/or with file as a string key to a list file path.
+
+###func (*FCGIClient) PostForm         
+    func (this *FCGIClient) PostForm(p map[string]string, data url.Values) (resp *http.Response, err error)
+PostForm issues a POST to the fcgi responder, with form as a string key to a list values (url.Values)
+
+###func (*FCGIClient) RawRequest         
+    func (this *FCGIClient) RawRequest(p map[string]string, rd io.Reader) (r io.Reader, err error)
+RawRequest made the request and returns a io.Reader that translates the data read from fcgi responder out of fcgi packet before returning it.
+
+###func (*FCGIClient) Request         
+    func (this *FCGIClient) Request(p map[string]string, rd io.Reader) (resp *http.Response, err error)
+Request returns a HTTP Response with Header and Body from fcgi responder

@@ -128,10 +128,12 @@ type FCGIClient struct {
 	reqId     uint16
 }
 
-func New(t string, a string) (fcgi *FCGIClient, err error) {
+// Connects to the fcgi responder at the specified network address. 
+// See func net.Dial for a description of the network and address parameters.
+func New(network, address string) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
 
-	conn, err = net.Dial(t, a)
+	conn, err = net.Dial(network, address)
 	if err != nil {
 		return
 	}
@@ -145,6 +147,7 @@ func New(t string, a string) (fcgi *FCGIClient, err error) {
 	return
 }
 
+// Close fcgi connnection
 func (this *FCGIClient) Close() {
 	this.rwc.Close()
 }
