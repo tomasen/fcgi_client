@@ -325,9 +325,9 @@ func (w *streamReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// writeRequest made the request and returns a io.Reader that translates the data read 
+// Do made the request and returns a io.Reader that translates the data read 
 // from fcgi responder out of fcgi packet before returning it.
-func (this *FCGIClient) writeRequest(p map[string]string, req io.Reader) (r io.Reader, err error) {
+func (this *FCGIClient) Do(p map[string]string, req io.Reader) (r io.Reader, err error) {
 	err = this.writeBeginRequest(uint16(FCGI_RESPONDER), 0)	
 	if err != nil {
 		return
@@ -352,7 +352,7 @@ func (this *FCGIClient) writeRequest(p map[string]string, req io.Reader) (r io.R
 // from fcgi responder
 func (this *FCGIClient) Request(p map[string]string, req io.Reader) (resp *http.Response, err error) {
 
-	r, err := this.writeRequest(p, req)
+	r, err := this.Do(p, req)
 	if err != nil {
 		return
 	}

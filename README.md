@@ -1,6 +1,6 @@
 #Go fastcgi client with fcgi params support
 
-####Status: Beta
+####Status: Prodution
 
 Forked from https://code.google.com/p/go-fastcgi-client/
 
@@ -108,12 +108,16 @@ PostFile issues a POST to the fcgi responder in multipart(RFC 2046) standard, wi
 ###func (*FCGIClient) PostForm         
     func (this *FCGIClient) PostForm(p map[string]string,        
                                      data url.Values) (resp *http.Response, err error)
-PostForm issues a POST to the fcgi responder, with form as a string key to a list values (url.Values)
+PostForm issues a POST to the fcgi responder, with form as a string key to a list values (url.Values)   
 
 ###func (*FCGIClient) Request         
-    func (this *FCGIClient) Request(p map[string]string, 
-                                         req io.Reader) (resp *http.Response, err error)
+    func (this *FCGIClient) Do(p map[string]string, req io.Reader) (r io.Reader, err error)    
 Request returns a HTTP Response with Header and Body from fcgi responder
+
+###func (*FCGIClient) Do         
+    func (this *FCGIClient) Request(p map[string]string, 
+                                         req io.Reader) (resp *http.Response, err error)     
+Do made the request and returns a io.Reader that translates the data read from fcgi responder out of fcgi packet before returning it.
 
 ###func (*FCGIClient) Close         
     func (this *FCGIClient) Close()
