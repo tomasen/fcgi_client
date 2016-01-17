@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"mime/multipart"
 	"path/filepath"
+  "time"
 )
 
 const FCGI_LISTENSOCK_FILENO uint8 = 0
@@ -134,6 +135,26 @@ func Dial(network, address string) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
 
 	conn, err = net.Dial(network, address)
+	if err != nil {
+		return
+	}
+
+	fcgi = &FCGIClient{
+		rwc:       conn,
+		keepAlive: false,
+		reqId:     1,
+	}
+  
+	return
+}
+
+// Connects to the fcgi responder at the specified network address with timeout
+// See func net.DialTimeout for a description of the network, address and timeout parameters.
+func DialTimeout(network, address string, timeout time.Duration) (fcgi *FCGIClient, err error) {
+	
+  var conn net.Conn
+
+	conn, err = net.DialTimeout(network, address, timeout)
 	if err != nil {
 		return
 	}
