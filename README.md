@@ -97,6 +97,11 @@ More examples can be found in [fcgiclient_test.go](https://github.com/tomasen/fc
     func Dial(network, address string) (fcgi *FCGIClient, err error)
 Connects to the fcgi responder at the specified network address. See func [net.Dial](http://golang.org/pkg/net/#Dial) for a description of the network and address parameters.
 
+#### func DialTimeout         
+    func DialTimeout(network, address string, timeout time.Duration) (fcgi *FCGIClient, err error)
+Connects to the fcgi responder at the specified network address with timeout. See func [net.DialTimeout](http://golang.org/pkg/net/#DialTimeout) for a description of the network, address and timeout parameters.
+
+
 #### func (*FCGIClient) Get         
     func (this *FCGIClient) Get(p map[string]string) (resp *http.Response, err error)
 Get issues a GET request to the fcgi responder.
