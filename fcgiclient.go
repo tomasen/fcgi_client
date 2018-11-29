@@ -7,6 +7,7 @@ package fcgiclient
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -131,32 +132,26 @@ type FCGIClient struct {
 	reqId     uint16
 }
 
-// Connects to the fcgi responder at the specified network address.
-// See func net.Dial for a description of the network and address parameters.
+// Dialer for this packages Dial* calls.
+var Dialer = net.Dialer{}
+
+// Connects to the fcgi responder at the specified network address using `Dialer`.
 func Dial(network, address string) (fcgi *FCGIClient, err error) {
-	var conn net.Conn
-
-	conn, err = net.Dial(network, address)
-	if err != nil {
-		return
-	}
-
-	fcgi = &FCGIClient{
-		rwc:       conn,
-		keepAlive: false,
-		reqId:     1,
-	}
-
-	return
+	return DialContext(context.Background(), network, address)
 }
 
-// Connects to the fcgi responder at the specified network address with timeout
-// See func net.DialTimeout for a description of the network, address and timeout parameters.
+// Connects to the fcgi responder at the specified network address using `Dialer` with timeout.
 func DialTimeout(network, address string, timeout time.Duration) (fcgi *FCGIClient, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return DialContext(ctx, network, address)
+}
 
+// Connects to the fcgi responder at the specified network address using `Dialer` with context.
+func DialContext(ctx context.Context, network, address string) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
 
-	conn, err = net.DialTimeout(network, address, timeout)
+	conn, err = Dialer.DialContext(ctx, network, address)
 	if err != nil {
 		return
 	}
