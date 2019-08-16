@@ -397,27 +397,34 @@ func (this *FCGIClient) Request(p map[string]string, req io.Reader) (resp *http.
 		}
 		return nil, err
 	}
-	if i := strings.IndexByte(line, ' '); i == -1 {
-		err = &badStringError{"malformed HTTP response", line}
-	} else {
-		resp.Proto = line[:i]
-		resp.Status = strings.TrimLeft(line[i+1:], " ")
-	}
-	statusCode := resp.Status
-	if i := strings.IndexByte(resp.Status, ' '); i != -1 {
-		statusCode = resp.Status[:i]
-	}
-	if len(statusCode) != 3 {
-		err = &badStringError{"malformed HTTP status code", statusCode}
-	}
-	resp.StatusCode, err = strconv.Atoi(statusCode)
-	if err != nil || resp.StatusCode < 0 {
-		err = &badStringError{"malformed HTTP status code", statusCode}
-	}
-	var ok bool
-	if resp.ProtoMajor, resp.ProtoMinor, ok = http.ParseHTTPVersion(resp.Proto); !ok {
-		err = &badStringError{"malformed HTTP version", resp.Proto}
-	}
+
+    gotStatus := false
+
+    if strings.IndexByte(line, ':') == -1 {
+        gotStatus = true
+        if i := strings.IndexByte(line, ' '); i == -1 {
+            err = &badStringError{"malformed HTTP response", line}
+        } else {
+            resp.Proto = line[:i]
+            resp.Status = strings.TrimLeft(line[i+1:], " ")
+        }
+        statusCode := resp.Status
+        if i := strings.IndexByte(resp.Status, ' '); i != -1 {
+            statusCode = resp.Status[:i]
+        }
+        if len(statusCode) != 3 {
+            err = &badStringError{"malformed HTTP status code", statusCode}
+        }
+        resp.StatusCode, err = strconv.Atoi(statusCode)
+        if err != nil || resp.StatusCode < 0 {
+            err = &badStringError{"malformed HTTP status code", statusCode}
+        }
+        var ok bool
+        if resp.ProtoMajor, resp.ProtoMinor, ok = http.ParseHTTPVersion(resp.Proto); !ok {
+            err = &badStringError{"malformed HTTP version", resp.Proto}
+        }
+    }
+
 	// Parse the response headers.
 	mimeHeader, err := tp.ReadMIMEHeader()
 	if err != nil {
@@ -426,6 +433,17 @@ func (this *FCGIClient) Request(p map[string]string, req io.Reader) (resp *http.
 		}
 		return nil, err
 	}
+
+    if !gotStatus {
+        if i := strings.IndexByte(line, ':'); i!=-1 {
+            mimeHeader.Add(string(line[:i]), strings.TrimSpace(string(line[i+1:])))
+        }
+        if status := mimeHeader.Get("Status"); status!="" {
+            resp.StatusCode,_ = strconv.Atoi(status[:3])
+            resp.Status = status
+        }
+    }
+
 	resp.Header = http.Header(mimeHeader)
 	// TODO: fixTransferEncoding ?
 	resp.TransferEncoding = resp.Header["Transfer-Encoding"]
