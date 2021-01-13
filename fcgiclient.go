@@ -175,6 +175,26 @@ func (this *FCGIClient) Close() {
 	this.rwc.Close()
 }
 
+// Set timeout for all future and pending read and write operations
+func (this *FCGIClient) SetTimeout(timeout time.Duration) error {
+	conn, ok := this.rwc.(net.Conn)
+	if !ok {
+		return errors.New("Invalid FCGIClient.rwc")
+	}
+
+	return conn.SetDeadline(time.Now().Add(timeout))
+}
+
+// Cancel timeout for all future and pending read and write operations
+func (this *FCGIClient) CancelTimeout() error {
+	conn, ok := this.rwc.(net.Conn)
+	if !ok {
+		return errors.New("Invalid FCGIClient.rwc")
+	}
+
+	return conn.SetDeadline(time.Time{})
+}
+
 func (this *FCGIClient) writeRecord(recType uint8, content []byte) (err error) {
 	this.mutex.Lock()
 	defer this.mutex.Unlock()
